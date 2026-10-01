@@ -118,11 +118,13 @@ class ParkingLevel{
     }
 
 
-    int getAvailableSpots(){
+    int getAvailableSpots(VehicleType vehicleType){
         int ans=0;
 
         for(ParkingSpot parkingSpot:parkingSpotList){
-            if(parkingSpot.occupied==false) ans++;
+            if(parkingSpot.occupied==true) continue;
+
+            if(parkingSpot.vehicleType==vehicleType) ans++;
         }
 
         return ans;
@@ -211,10 +213,10 @@ class ParkingLot{
        return pricingCalculator.getPrice(ticket);
     }
 
-    synchronized int getAvailableSpots(){
+    synchronized int getAvailableSpots(VehicleType vehicleType){
      int ans=0;
         for(ParkingLevel parkingLevel:parkingLevels){
-            ans+=parkingLevel.getAvailableSpots();
+            ans+=parkingLevel.getAvailableSpots(vehicleType);
 
         }
 
