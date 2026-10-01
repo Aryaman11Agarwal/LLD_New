@@ -1,3 +1,4 @@
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -65,6 +66,8 @@ class Ticket{
 
         inTime=LocalDateTime.now();
 
+        spot.occupied=true;
+
 
 
     }
@@ -81,6 +84,13 @@ class Ticket{
         return spot;
     }
 
+
+    public void checkout(){
+
+        outTime=LocalDateTime.now();
+
+        status=TicketStatus.CLOSED;
+    }
 
 }
 
@@ -106,6 +116,56 @@ class ParkingLevel{
     public List<ParkingSpot> getParkingSpotList() {
         return parkingSpotList;
     }
+
+
+    int getAvailableSpots(){
+        int ans=0;
+
+        for(ParkingSpot parkingSpot:parkingSpotList){
+            if(parkingSpot.occupied==false) ans++;
+        }
+
+        return ans;
+    }
+}
+
+interface IParkingSpotFindStrategy{
+    ParkingSpot findSpot(ParkingLot parkingLot,VehicleType vehicleType);
+}
+
+class lowerSpotFirst implements IParkingSpotFindStrategy{
+
+    @Override
+    public ParkingSpot findSpot(ParkingLot parkingLot, VehicleType vehicleType) {
+        List<ParkingLevel> levels=parkingLot.getParkingLevels();
+
+        for(ParkingLevel parkingLevel:levels){
+            for(ParkingSpot parkingSpot:parkingLevel.getParkingSpotList()){
+                if(parkingSpot.occupied) continue;
+
+                return parkingSpot;
+            }
+        }
+
+        return null;
+    }
+}
+
+interface IPricingCalculator{
+
+    double getPrice(Ticket ticket);
+}
+
+class FixedPricingCalulator implements IPricingCalculator{
+
+    @Override
+    public double getPrice(Ticket ticket) {
+        Duration d=Duration.between(ticket.inTime, ticket.outTime);
+
+        long mins=d.toMinutes();
+
+        return mins*(0.5);
+    }
 }
 
 
@@ -114,6 +174,9 @@ class ParkingLot{
 
     static final AtomicInteger idCnt=new AtomicInteger(0);
     List<ParkingLevel> parkingLevels;
+
+    IParkingSpotFindStrategy parkingSpotFindStrategy;
+    IPricingCalculator pricingCalculator;
     final int id;
 
     public List<ParkingLevel> getParkingLevels() {
@@ -121,21 +184,41 @@ class ParkingLot{
 
     }
 
-    ParkingLot(List<ParkingLevel> parkingLevels){
+    ParkingLot(List<ParkingLevel> parkingLevels, IParkingSpotFindStrategy parkingSpotFindStrategy,IPricingCalculator pricingCalculator){
         this.parkingLevels=parkingLevels;
         this.id=idCnt.incrementAndGet();
+
+        this.parkingSpotFindStrategy=parkingSpotFindStrategy;
+        this.pricingCalculator=pricingCalculator;
     }
 
-    Ticket parkVehicle(Vehicle vehicle){
+   synchronized Ticket parkVehicle(Vehicle vehicle){
 
+        ParkingSpot spot=parkingSpotFindStrategy.findSpot(this,vehicle.getVehicleType());
+
+        if(spot==null) return null;
+
+        return new Ticket(vehicle,spot);
     }
 
-    double unparkVehicle(Ticket ticket){
+    synchronized double unparkVehicle(Ticket ticket){
 
+        if(ticket.status==TicketStatus.CLOSED){
+            throw new IllegalStateException("Ticket already closed");
+        }
+        ticket.checkout();
+
+       return pricingCalculator.getPrice(ticket);
     }
 
-    int getAvailableSpots(){
+    synchronized int getAvailableSpots(){
+     int ans=0;
+        for(ParkingLevel parkingLevel:parkingLevels){
+            ans+=parkingLevel.getAvailableSpots();
 
+        }
+
+        return ans;
     }
 
 
@@ -150,7 +233,7 @@ class UPIPaymentStrategy implements IPaymentStrategy{
 
 
     @Override
-    public boolean pay(double amount) {
+    public synchronized boolean pay(double amount) {
         System.out.println("Paying amount: "+ amount+" via UPI ");
         return true;
     }
@@ -159,23 +242,30 @@ class UPIPaymentStrategy implements IPaymentStrategy{
 
 class ParkingLotService{
 
+    ParkingLot parkingLot;
 
+    ParkingLotService(ParkingLot parkingLot){
+        this.parkingLot=parkingLot;
+    }
     //
 
     Ticket park(Vehicle vehicle){
-
+            return parkingLot.parkVehicle(vehicle);
     }
 
     double unpark(Ticket ticket){
+      return parkingLot.unparkVehicle(ticket);
 
     }
 
     int getAvailableSpots(){
-
+       return parkingLot.getAvailableSpots();
     }
 
-    boolean makePayment(double rs,IPaymentStrategy paymentStrategy){
+    boolean makePayment(double rs,IPaymentStrategy paymentStrategy)
+    {
 
+       return paymentStrategy.pay(rs);
     }
 }
 public class Main {
