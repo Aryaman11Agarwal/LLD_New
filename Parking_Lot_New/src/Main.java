@@ -260,8 +260,8 @@ class ParkingLotService{
 
     }
 
-    int getAvailableSpots(){
-       return parkingLot.getAvailableSpots();
+    int getAvailableSpots(VehicleType vehicleType){
+       return parkingLot.getAvailableSpots(vehicleType);
     }
 
     boolean makePayment(double rs,IPaymentStrategy paymentStrategy)
